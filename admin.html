@@ -12,7 +12,7 @@
     background: #f5f6f8;
     padding: 20px 14px 60px;
   }
-  .wrap { max-width: 720px; margin: 0 auto; }
+  .wrap { max-width: 760px; margin: 0 auto; }
   .card {
     background: white;
     border-radius: 14px;
@@ -21,7 +21,8 @@
     margin-bottom: 18px;
   }
   h1 { font-size: 20px; margin: 0 0 20px; }
-  h2 { font-size: 15px; margin: 0 0 14px; color: #333; }
+  h2 { font-size: 15px; margin: 0; color: #333; }
+  .section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
   label { display: block; font-size: 12px; color: #777; margin: 10px 0 4px; }
   input, select {
     width: 100%;
@@ -44,6 +45,12 @@
     color: white;
     margin-top: 18px;
   }
+  .btn-add {
+    background: #2c3e50;
+    color: white;
+    padding: 9px 14px;
+    font-size: 13px;
+  }
   .btn-small {
     padding: 6px 10px;
     font-size: 12px;
@@ -52,7 +59,30 @@
   .btn-copy { background: #3498db; color: white; }
   .btn-play { background: #3498db; color: white; }
   .btn-delete { background: #fdecea; color: #e74c3c; }
-  .btn-danger { background: #e74c3c; color: white; }
+  .btn-cancel { background: #f0f0f0; color: #555; }
+
+  /* 탭 네비게이션 */
+  .tab-nav {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 18px;
+    background: white;
+    border-radius: 12px;
+    padding: 6px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 11px;
+    background: transparent;
+    color: #888;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  .tab-btn.active { background: #2c3e50; color: white; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
   .storage-bar-bg { background: #eee; border-radius: 8px; height: 14px; overflow: hidden; margin: 10px 0 6px; }
   .storage-bar-fill { height: 100%; background: #3498db; transition: width 0.3s; }
   .storage-bar-fill.warn { background: #e67e22; }
@@ -70,23 +100,45 @@
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; }
   th { color: #888; font-weight: 500; font-size: 12px; }
-  .member-row { cursor: pointer; }
-  .member-row:hover { background: #f9f9fb; }
   .link-cell { display: flex; align-items: center; gap: 6px; }
-  .rec-detail { display: none; padding: 10px 0; }
   .rec-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 0;
+    padding: 10px 0;
     border-bottom: 1px solid #f0f0f0;
-    font-size: 12.5px;
+    font-size: 13px;
+    flex-wrap: wrap;
   }
   .rec-actions { display: flex; gap: 6px; align-items: center; }
   .empty { color: #aaa; font-size: 13px; padding: 8px 0; }
-  audio { width: 100%; margin-top: 6px; display: none; }
+  audio { width: 100%; margin-top: 8px; display: none; }
   .status-msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
   #loginBox { max-width: 320px; margin: 80px auto; }
+
+  /* 학생 등록 모달 */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 50;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-box {
+    background: white;
+    border-radius: 14px;
+    padding: 22px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-actions button { flex: 1; padding: 11px; margin-top: 0; }
 </style>
 </head>
 <body>
@@ -110,39 +162,71 @@
       <div class="warning-banner" id="warningBanner">⚠ 저장 공간이 얼마 남지 않았어요. 오래된 녹음을 정리해주세요.</div>
     </div>
 
-    <div class="card">
-      <h2>회원 추가</h2>
-      <label>이름</label>
-      <input type="text" id="f_name">
-      <label>전화번호</label>
-      <input type="text" id="f_phone" placeholder="010-0000-0000">
-      <label>주소</label>
-      <input type="text" id="f_address">
-      <label>학교</label>
-      <input type="text" id="f_school">
-      <label>가입일자</label>
-      <input type="date" id="f_joinDate">
-      <label>가입학년</label>
-      <select id="f_joinGrade">
-        <option>5세</option><option>6세</option><option>7세</option>
-        <option>초1</option><option>초2</option><option>초3</option>
-        <option>초4</option><option>초5</option><option>초6</option>
-        <option>중1</option><option>중2</option><option>중3</option>
-      </select>
-      <button class="btn-primary" id="addMemberBtn">회원 추가</button>
-      <div class="status-msg" id="addMsg"></div>
+    <div class="tab-nav">
+      <button class="tab-btn active" data-tab="students">학생 관리</button>
+      <button class="tab-btn" data-tab="records">학생 기록 보기</button>
     </div>
 
-    <div class="card">
-      <h2>회원 목록</h2>
-      <table>
-        <thead>
-          <tr><th>이름</th><th>학교</th><th>현재학년</th><th>링크</th></tr>
-        </thead>
-        <tbody id="memberTableBody"></tbody>
-      </table>
+    <!-- 학생 관리 탭 -->
+    <div class="tab-panel active" id="tab-students">
+      <div class="card">
+        <div class="section-head">
+          <h2>학생 목록</h2>
+          <button class="btn-add" id="openAddModalBtn">+ 학생 등록</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>이름</th><th>학교</th><th>현재학년</th><th>링크</th></tr>
+          </thead>
+          <tbody id="memberTableBody"></tbody>
+        </table>
+      </div>
     </div>
 
+    <!-- 학생 기록 보기 탭 -->
+    <div class="tab-panel" id="tab-records">
+      <div class="card">
+        <h2>학생 선택</h2>
+        <label>학생</label>
+        <select id="recordMemberSelect">
+          <option value="">-- 학생을 선택하세요 --</option>
+        </select>
+      </div>
+      <div class="card" id="recordListCard" style="display:none;">
+        <h2 id="recordListTitle">녹음 기록</h2>
+        <div id="recList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- 학생 등록 모달 -->
+<div class="modal-overlay" id="addModalOverlay">
+  <div class="modal-box">
+    <h1 style="margin-bottom:16px;">학생 등록</h1>
+    <label>이름</label>
+    <input type="text" id="f_name">
+    <label>전화번호</label>
+    <input type="text" id="f_phone" placeholder="010-0000-0000">
+    <label>주소</label>
+    <input type="text" id="f_address">
+    <label>학교</label>
+    <input type="text" id="f_school">
+    <label>가입일자</label>
+    <input type="date" id="f_joinDate">
+    <label>가입학년</label>
+    <select id="f_joinGrade">
+      <option>5세</option><option>6세</option><option>7세</option>
+      <option>초1</option><option>초2</option><option>초3</option>
+      <option>초4</option><option>초5</option><option>초6</option>
+      <option>중1</option><option>중2</option><option>중3</option>
+    </select>
+    <div class="status-msg" id="addMsg"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelAddBtn">취소</button>
+      <button class="btn-primary" id="addMemberBtn" style="margin-top:0;">등록</button>
+    </div>
   </div>
 </div>
 
@@ -170,7 +254,7 @@ const SUPABASE_BUCKET = "Recordings";
 
 const ADMIN_PASSWORD = "hanwoori6331";
 const STORAGE_CAP_BYTES = 1024 * 1024 * 1024; // Supabase 무료 한도 1GB
-const RECORD_PAGE_URL = "record.html"; // 실제 배포 경로에 맞게 수정 (예: https://내사이트.com/record.html)
+const RECORD_PAGE_URL = "record.html"; // 실제 배포 경로에 맞게 수정
 const RETENTION_DAYS = 7;
 
 const app = initializeApp(firebaseConfig);
@@ -232,7 +316,19 @@ loginBtn.addEventListener("click", () => {
 });
 pwInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loginBtn.click(); });
 
+// ---------- 탭 전환 ----------
+document.querySelectorAll(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+    btn.classList.add("active");
+    document.getElementById("tab-" + btn.dataset.tab).classList.add("active");
+  });
+});
+
 // ---------- 초기 로드 ----------
+let membersCache = [];
+
 async function init() {
   await loadStorageUsage();
   await loadMembers();
@@ -260,7 +356,21 @@ async function loadStorageUsage() {
   bannerEl.style.display = pct >= 80 ? "block" : "none";
 }
 
-// ---------- 회원 추가 ----------
+// ---------- 학생 등록 모달 ----------
+const addModalOverlay = document.getElementById("addModalOverlay");
+const addMsg = document.getElementById("addMsg");
+
+document.getElementById("openAddModalBtn").addEventListener("click", () => {
+  addMsg.textContent = "";
+  addModalOverlay.classList.add("open");
+});
+document.getElementById("cancelAddBtn").addEventListener("click", () => {
+  addModalOverlay.classList.remove("open");
+});
+addModalOverlay.addEventListener("click", (e) => {
+  if (e.target === addModalOverlay) addModalOverlay.classList.remove("open");
+});
+
 document.getElementById("addMemberBtn").addEventListener("click", async () => {
   const name = document.getElementById("f_name").value.trim();
   const phone = document.getElementById("f_phone").value.trim();
@@ -268,7 +378,6 @@ document.getElementById("addMemberBtn").addEventListener("click", async () => {
   const school = document.getElementById("f_school").value.trim();
   const joinDate = document.getElementById("f_joinDate").value;
   const joinGrade = document.getElementById("f_joinGrade").value;
-  const addMsg = document.getElementById("addMsg");
 
   if (!name || !joinDate) {
     addMsg.textContent = "이름과 가입일자는 필수입니다.";
@@ -283,15 +392,16 @@ document.getElementById("addMemberBtn").addEventListener("click", async () => {
       active: true,
       createdAt: Timestamp.now()
     });
-    addMsg.textContent = `추가 완료! 링크: ${RECORD_PAGE_URL}?id=${token}`;
+    addMsg.textContent = "";
     ["f_name","f_phone","f_address","f_school","f_joinDate"].forEach(id => document.getElementById(id).value = "");
+    addModalOverlay.classList.remove("open");
     await loadMembers();
   } catch (e) {
-    addMsg.textContent = "추가에 실패했습니다.";
+    addMsg.textContent = "등록에 실패했습니다.";
   }
 });
 
-// ---------- 회원 목록 ----------
+// ---------- 학생 목록 (학생 관리 탭) ----------
 async function loadMembers() {
   const tbody = document.getElementById("memberTableBody");
   tbody.innerHTML = `<tr><td colspan="4" class="empty">불러오는 중...</td></tr>`;
@@ -304,68 +414,76 @@ async function loadMembers() {
     return;
   }
 
-  if (snap.empty) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">등록된 회원이 없습니다.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = "";
-
+  membersCache = [];
   snap.forEach((docSnap) => {
-    const token = docSnap.id;
     const m = docSnap.data();
     if (m.active === false) return;
-
-    const currentGrade = getCurrentGrade(m.joinDate, m.joinGrade);
-    const link = `${RECORD_PAGE_URL}?id=${token}`;
-
-    const row = document.createElement("tr");
-    row.className = "member-row";
-    row.innerHTML = `
-      <td>${m.name}</td>
-      <td>${m.school || "-"}</td>
-      <td>${currentGrade}</td>
-      <td>
-        <div class="link-cell">
-          <button class="btn-small btn-copy" data-link="${link}">복사</button>
-        </div>
-      </td>
-    `;
-
-    const detailRow = document.createElement("tr");
-    const detailCell = document.createElement("td");
-    detailCell.colSpan = 4;
-    const detailDiv = document.createElement("div");
-    detailDiv.className = "rec-detail";
-    detailDiv.dataset.loaded = "0";
-    detailCell.appendChild(detailDiv);
-    detailRow.appendChild(detailCell);
-
-    row.addEventListener("click", (e) => {
-      if (e.target.closest(".btn-copy")) return;
-      const isOpen = detailDiv.style.display === "block";
-      detailDiv.style.display = isOpen ? "none" : "block";
-      if (!isOpen && detailDiv.dataset.loaded === "0") {
-        loadMemberRecordings(token, m.name, detailDiv);
-        detailDiv.dataset.loaded = "1";
-      }
-    });
-
-    row.querySelector(".btn-copy").addEventListener("click", async (e) => {
-      e.stopPropagation();
-      await navigator.clipboard.writeText(link);
-      const btn = e.target;
-      const orig = btn.textContent;
-      btn.textContent = "복사됨!";
-      setTimeout(() => { btn.textContent = orig; }, 1200);
-    });
-
-    tbody.appendChild(row);
-    tbody.appendChild(detailRow);
+    membersCache.push({ token: docSnap.id, ...m });
   });
+
+  if (membersCache.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">등록된 학생이 없습니다.</td></tr>`;
+  } else {
+    tbody.innerHTML = "";
+    membersCache
+      .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+      .forEach((m) => {
+        const currentGrade = getCurrentGrade(m.joinDate, m.joinGrade);
+        const link = `${RECORD_PAGE_URL}?id=${m.token}`;
+
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>${m.name}</td>
+          <td>${m.school || "-"}</td>
+          <td>${currentGrade}</td>
+          <td><button class="btn-small btn-copy">복사</button></td>
+        `;
+        row.querySelector(".btn-copy").addEventListener("click", async () => {
+          await navigator.clipboard.writeText(link);
+          const btn = row.querySelector(".btn-copy");
+          const orig = btn.textContent;
+          btn.textContent = "복사됨!";
+          setTimeout(() => { btn.textContent = orig; }, 1200);
+        });
+        tbody.appendChild(row);
+      });
+  }
+
+  populateRecordSelect();
 }
 
-// ---------- 회원별 녹음 기록 ----------
+// ---------- 학생 기록 보기 탭 ----------
+function populateRecordSelect() {
+  const select = document.getElementById("recordMemberSelect");
+  const currentValue = select.value;
+  select.innerHTML = `<option value="">-- 학생을 선택하세요 --</option>`;
+  membersCache
+    .sort((a, b) => a.name.localeCompare(b.name, "ko"))
+    .forEach((m) => {
+      const opt = document.createElement("option");
+      opt.value = m.token;
+      opt.textContent = `${m.name} (${m.school || "학교 미입력"})`;
+      select.appendChild(opt);
+    });
+  if (currentValue) select.value = currentValue;
+}
+
+document.getElementById("recordMemberSelect").addEventListener("change", (e) => {
+  const token = e.target.value;
+  const card = document.getElementById("recordListCard");
+  const recList = document.getElementById("recList");
+  const titleEl = document.getElementById("recordListTitle");
+
+  if (!token) {
+    card.style.display = "none";
+    return;
+  }
+  const member = membersCache.find((m) => m.token === token);
+  titleEl.textContent = `${member.name}님의 녹음 기록`;
+  card.style.display = "block";
+  loadMemberRecordings(token, member.name, recList);
+});
+
 async function loadMemberRecordings(token, memberName, containerEl) {
   containerEl.innerHTML = `<div class="empty">불러오는 중...</div>`;
 
