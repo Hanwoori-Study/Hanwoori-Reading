@@ -188,10 +188,14 @@
     <div class="tab-panel" id="tab-records">
       <div class="card">
         <h2>학생 선택</h2>
-        <label>학생</label>
+        <label>학생 (선택하지 않으면 전체 최근 기록이 표시됩니다)</label>
         <select id="recordMemberSelect">
-          <option value="">-- 학생을 선택하세요 --</option>
+          <option value="">-- 전체 최근 기록 보기 --</option>
         </select>
+      </div>
+      <div class="card" id="recentAllCard">
+        <h2>전체 최근 기록</h2>
+        <div id="recentAllList"></div>
       </div>
       <div class="card" id="recordListCard" style="display:none;">
         <h2 id="recordListTitle">녹음 기록</h2>
@@ -264,7 +268,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
   getFirestore, collection, doc, setDoc, updateDoc, getDocs, query, where,
-  orderBy, deleteDoc, Timestamp
+  orderBy, deleteDoc, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
 
@@ -362,6 +366,7 @@ let membersCache = [];
 async function init() {
   await loadStorageUsage();
   await loadMembers();
+  await loadRecentRecordings();
 }
 
 // ---------- 저장공간 사용량 ----------
@@ -552,7 +557,7 @@ async function deleteMember(token, name) {
 function populateRecordSelect() {
   const select = document.getElementById("recordMemberSelect");
   const currentValue = select.value;
-  select.innerHTML = `<option value="">-- 학생을 선택하세요 --</option>`;
+  select.innerHTML = `<option value="">-- 전체 최근 기록 보기 --</option>`;
   membersCache
     .sort((a, b) => a.name.localeCompare(b.name, "ko"))
     .forEach((m) => {
@@ -569,16 +574,79 @@ document.getElementById("recordMemberSelect").addEventListener("change", (e) => 
   const card = document.getElementById("recordListCard");
   const recList = document.getElementById("recList");
   const titleEl = document.getElementById("recordListTitle");
+  const recentAllCard = document.getElementById("recentAllCard");
 
   if (!token) {
     card.style.display = "none";
+    recentAllCard.style.display = "block";
     return;
   }
+  recentAllCard.style.display = "none";
   const member = membersCache.find((m) => m.token === token);
   titleEl.textContent = `${member.name}님의 녹음 기록`;
   card.style.display = "block";
   loadMemberRecordings(token, member.name, recList);
 });
+
+// ---------- 전체 최근 기록 (대시보드) ----------
+async function loadRecentRecordings() {
+  const containerEl = document.getElementById("recentAllList");
+  containerEl.innerHTML = `<div class="empty">불러오는 중...</div>`;
+
+  const q = query(
+    collection(db, "recordings"),
+    orderBy("submittedAt", "desc"),
+    limit(30)
+  );
+
+  let snap;
+  try {
+    snap = await getDocs(q);
+  } catch (e) {
+    containerEl.innerHTML = `<div class="empty">기록을 불러오지 못했습니다.</div>`;
+    return;
+  }
+
+  if (snap.empty) {
+    containerEl.innerHTML = `<div class="empty">제출한 기록이 없습니다.</div>`;
+    return;
+  }
+
+  containerEl.innerHTML = "";
+  snap.docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (!data.submittedAt) return;
+
+    const member = membersCache.find((m) => m.token === data.memberId);
+    const memberName = member ? member.name : "(알 수 없음)";
+
+    const item = document.createElement("div");
+    item.className = "rec-item";
+
+    const info = document.createElement("div");
+    info.innerHTML = `<strong>${memberName}</strong> · ${formatDate(data.submittedAt)} · ${formatDuration(data.duration || 0)} · ${formatBytes(data.sizeBytes || 0)}`;
+
+    const actions = document.createElement("div");
+    actions.className = "rec-actions";
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "btn-small btn-play";
+    playBtn.textContent = "▶ 듣기";
+    playBtn.addEventListener("click", () => playRecording(data.audioPath, item, playBtn));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-small btn-delete";
+    delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => deleteRecording(docSnap.id, data.audioPath, item, memberName));
+
+    actions.appendChild(playBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    containerEl.appendChild(item);
+  });
+}
 
 async function loadMemberRecordings(token, memberName, containerEl) {
   containerEl.innerHTML = `<div class="empty">불러오는 중...</div>`;
