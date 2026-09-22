@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://hnvuejkpwygbugykqmxl.supabase.co">
 <title>관리자 - 낭독 녹음</title>
 <style>
   * { box-sizing: border-box; }
@@ -264,13 +266,17 @@
   </div>
 </div>
 
+<!-- Supabase는 +esm(연쇄 모듈 요청) 대신 단일 번들(UMD)로 미리 로드합니다.
+     사파리(iOS)에서 +esm 방식이 느리거나 멈추는 문제 대응 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, updateDoc, getDocs, query, where,
+  initializeFirestore, collection, doc, setDoc, updateDoc, getDocs, query, where,
   orderBy, deleteDoc, limit, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const { createClient } = window.supabase;
 
 // ▼▼▼ record.html과 동일한 값을 넣으세요 ▼▼▼
 const firebaseConfig = {
@@ -292,7 +298,12 @@ const RECORD_PAGE_URL = "https://hanwoori-study.github.io/Hanwoori-Reading/recor
 const RETENTION_DAYS = 7;
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// 사파리(iOS)에서 Firestore 기본 연결(WebChannel)이 느리거나 멈추는 경우가 있어
+// 롱폴링 자동 감지 모드로 초기화합니다.
+const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false
+});
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const GRADE_ORDER = ["5세","6세","7세","초1","초2","초3","초4","초5","초6","중1","중2","중3"];

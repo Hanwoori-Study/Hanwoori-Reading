@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://hnvuejkpwygbugykqmxl.supabase.co">
 <title>낭독 녹음</title>
 <style>
   * { box-sizing: border-box; }
@@ -91,6 +93,10 @@
   <div id="loadingBox" class="error-box">불러오는 중...</div>
 </div>
 
+<!-- Supabase는 +esm(연쇄 모듈 요청) 대신 단일 번들(UMD)로 미리 로드합니다.
+     사파리(iOS)에서 +esm 방식이 느리거나 멈추는 문제 대응 -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <!-- ===================== 설정 =====================
   Firestore(회원/제출기록)는 Firebase, 오디오 파일 저장은 Supabase Storage를 씁니다.
   SUPABASE_URL / SUPABASE_ANON_KEY는 Supabase 프로젝트 Settings > API에서 복사해서 넣으세요.
@@ -98,10 +104,10 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, doc, getDoc, collection, addDoc, query, where,
+  initializeFirestore, doc, getDoc, collection, addDoc, query, where,
   orderBy, limit, getDocs, serverTimestamp, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+const { createClient } = window.supabase;
 
 // ▼▼▼ 여기에 본인의 firebaseConfig를 붙여넣으세요 ▼▼▼
 const firebaseConfig = {
@@ -121,7 +127,12 @@ const SUPABASE_BUCKET = "Recordings";
 // ▲▲▲ ------------------------------------------------- ▲▲▲
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+// 사파리(iOS)에서 Firestore 기본 연결(WebChannel)이 느리거나 멈추는 경우가 있어
+// 롱폴링 자동 감지 모드로 초기화합니다. (안 뜨거나 너무 늦게 뜨는 문제 대응)
+const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false
+});
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const MAX_SECONDS = 20 * 60; // 최대 20분
@@ -189,6 +200,15 @@ async function main() {
   let timerInterval = null;
   let autoStopTimeout = null;
   let isRecording = false;
+  let recordedMimeType = "audio/webm";
+
+  function extFromMime(mime) {
+    if (!mime) return "webm";
+    if (mime.includes("mp4")) return "m4a";
+    if (mime.includes("aac")) return "aac";
+    if (mime.includes("ogg")) return "ogg";
+    return "webm";
+  }
 
   recBtn.addEventListener("click", async () => {
     if (!isRecording) {
@@ -207,15 +227,42 @@ async function main() {
       return;
     }
 
+    if (typeof MediaRecorder === "undefined") {
+      statusText.textContent = "이 브라우저에서는 녹음이 지원되지 않습니다. Safari를 최신 버전으로 업데이트해주세요.";
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+
     chunks = [];
     seconds = 0;
     timerEl.textContent = "00:00";
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
+    // 사파리(iOS)는 audio/webm을 지원하지 않으므로 지원되는 포맷을 순서대로 탐색합니다.
+    const mimeCandidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/mp4",
+      "audio/aac"
+    ];
+    const supportedMime = mimeCandidates.find(
+      (t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)
+    );
 
-    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    try {
+      mediaRecorder = supportedMime
+        ? new MediaRecorder(stream, { mimeType: supportedMime })
+        : new MediaRecorder(stream);
+    } catch (e) {
+      try {
+        mediaRecorder = new MediaRecorder(stream);
+      } catch (e2) {
+        statusText.textContent = "이 기기에서는 녹음 기능을 사용할 수 없습니다.";
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+    }
+    recordedMimeType = mediaRecorder.mimeType || supportedMime || "audio/webm";
+
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
     mediaRecorder.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
@@ -252,15 +299,16 @@ async function main() {
 
   async function handleUpload() {
     const finalDuration = seconds;
-    const blob = new Blob(chunks, { type: "audio/webm" });
+    const blob = new Blob(chunks, { type: recordedMimeType });
     const now = new Date();
-    const fileName = `${now.getTime()}.webm`;
+    const ext = extFromMime(recordedMimeType);
+    const fileName = `${now.getTime()}.${ext}`;
     const storagePath = `recordings/${token}/${fileName}`;
 
     try {
       const { error: uploadError } = await supabase.storage
         .from(SUPABASE_BUCKET)
-        .upload(storagePath, blob, { contentType: "audio/webm" });
+        .upload(storagePath, blob, { contentType: recordedMimeType });
 
       if (uploadError) throw uploadError;
 
