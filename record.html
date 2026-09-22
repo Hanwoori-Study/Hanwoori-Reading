@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>낭독 녹음</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    background: #f5f6f8;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: white;
+    border-radius: 16px;
+    padding: 28px 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; color: #222; }
+  .sub { color: #888; font-size: 14px; margin-bottom: 24px; }
+  .timer {
+    text-align: center;
+    font-size: 48px;
+    font-weight: 700;
+    color: #333;
+    margin: 20px 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .rec-btn {
+    display: block;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: none;
+    margin: 0 auto 24px;
+    background: #e74c3c;
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .rec-btn:active { transform: scale(0.96); }
+  .rec-btn.recording { background: #b03a2e; animation: pulse 1.4s infinite; }
+  .rec-btn:disabled { background: #ccc; cursor: not-allowed; animation: none; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(231,76,60,0.5); }
+    70% { box-shadow: 0 0 0 16px rgba(231,76,60,0); }
+    100% { box-shadow: 0 0 0 0 rgba(231,76,60,0); }
+  }
+  .status { text-align: center; font-size: 14px; color: #666; min-height: 20px; margin-bottom: 8px; }
+  .section-title { font-size: 14px; font-weight: 600; color: #444; margin: 28px 0 10px; }
+  .rec-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 13px;
+  }
+  .rec-item .info { color: #555; }
+  .rec-item .expired { color: #bbb; font-size: 12px; }
+  .play-btn {
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .play-btn:disabled { background: #eee; color: #bbb; cursor: not-allowed; }
+  .error-box {
+    text-align: center;
+    padding: 40px 20px;
+    color: #999;
+    font-size: 14px;
+  }
+  audio { width: 100%; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="card" id="app">
+  <div id="loadingBox" class="error-box">불러오는 중...</div>
+</div>
+
+<!-- ===================== 설정 =====================
+  Firestore(회원/제출기록)는 Firebase, 오디오 파일 저장은 Supabase Storage를 씁니다.
+  SUPABASE_URL / SUPABASE_ANON_KEY는 Supabase 프로젝트 Settings > API에서 복사해서 넣으세요.
+============================================================ -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, doc, getDoc, collection, addDoc, query, where,
+  orderBy, limit, getDocs, serverTimestamp, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+// ▼▼▼ 여기에 본인의 firebaseConfig를 붙여넣으세요 ▼▼▼
+const firebaseConfig = {
+  apiKey: "AIzaSyC0jkM17R8l1zAYSbUuURZhQD47-akObpg",
+  authDomain: "hanwoori-e184b.firebaseapp.com",
+  projectId: "hanwoori-e184b",
+  storageBucket: "hanwoori-e184b.firebasestorage.app",
+  messagingSenderId: "395552995873",
+  appId: "1:395552995873:web:4019457b34b9184ee78160"
+};
+// ▲▲▲ ----------------------------------------- ▲▲▲
+
+// ▼▼▼ 여기에 Supabase Project URL / anon key를 붙여넣으세요 ▼▼▼
+const SUPABASE_URL = "https://hnvuejkpwygbugykqmxl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_IKbtr9QWIYtPz31IheHzcA_iFKCmSGg";
+const SUPABASE_BUCKET = "Recordings";
+// ▲▲▲ ------------------------------------------------- ▲▲▲
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const MAX_SECONDS = 20 * 60; // 최대 20분
+const RETENTION_DAYS = 7;
+
+const params = new URLSearchParams(window.location.search);
+const token = params.get("id");
+
+const appEl = document.getElementById("app");
+
+function renderError(msg) {
+  appEl.innerHTML = `<div class="error-box">${msg}</div>`;
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, "0");
+  const s = Math.floor(sec % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+function formatDate(ts) {
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const pad = (n) => n.toString().padStart(2, "0");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function main() {
+  if (!token) {
+    renderError("잘못된 접속 링크입니다.");
+    return;
+  }
+
+  let memberSnap;
+  try {
+    memberSnap = await getDoc(doc(db, "members", token));
+  } catch (e) {
+    renderError("연결에 실패했습니다. 잠시 후 다시 시도해주세요.");
+    return;
+  }
+
+  if (!memberSnap.exists() || memberSnap.data().active === false) {
+    renderError("등록되지 않은 링크입니다. 관리자에게 문의해주세요.");
+    return;
+  }
+
+  const member = memberSnap.data();
+
+  appEl.innerHTML = `
+    <h1>${member.name}님, 오늘의 낭독 녹음</h1>
+    <div class="sub">녹음 버튼을 눌러 책을 소리내어 읽어주세요 (최대 20분)</div>
+    <div class="timer" id="timer">00:00</div>
+    <button class="rec-btn" id="recBtn">녹음 시작</button>
+    <div class="status" id="statusText"></div>
+    <div class="section-title">최근 녹음 기록</div>
+    <div id="recList"></div>
+  `;
+
+  const recBtn = document.getElementById("recBtn");
+  const timerEl = document.getElementById("timer");
+  const statusText = document.getElementById("statusText");
+
+  let mediaRecorder = null;
+  let chunks = [];
+  let seconds = 0;
+  let timerInterval = null;
+  let autoStopTimeout = null;
+  let isRecording = false;
+
+  recBtn.addEventListener("click", async () => {
+    if (!isRecording) {
+      await startRecording();
+    } else {
+      stopRecording("manual");
+    }
+  });
+
+  async function startRecording() {
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      statusText.textContent = "마이크 권한이 필요합니다.";
+      return;
+    }
+
+    chunks = [];
+    seconds = 0;
+    timerEl.textContent = "00:00";
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
+
+    mediaRecorder = new MediaRecorder(stream, { mimeType });
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop());
+      handleUpload();
+    };
+
+    mediaRecorder.start();
+    isRecording = true;
+    recBtn.textContent = "녹음 중지";
+    recBtn.classList.add("recording");
+    statusText.textContent = "";
+
+    timerInterval = setInterval(() => {
+      seconds += 1;
+      timerEl.textContent = formatDuration(seconds);
+    }, 1000);
+
+    autoStopTimeout = setTimeout(() => {
+      stopRecording("auto");
+    }, MAX_SECONDS * 1000);
+  }
+
+  function stopRecording(reason) {
+    if (!isRecording) return;
+    isRecording = false;
+    clearInterval(timerInterval);
+    clearTimeout(autoStopTimeout);
+    recBtn.disabled = true;
+    recBtn.classList.remove("recording");
+    recBtn.textContent = "업로드 중...";
+    statusText.textContent = reason === "auto" ? "20분이 되어 자동으로 종료되었습니다." : "";
+    mediaRecorder.stop();
+  }
+
+  async function handleUpload() {
+    const finalDuration = seconds;
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const now = new Date();
+    const fileName = `${now.getTime()}.webm`;
+    const storagePath = `recordings/${token}/${fileName}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .upload(storagePath, blob, { contentType: "audio/webm" });
+
+      if (uploadError) throw uploadError;
+
+      await addDoc(collection(db, "recordings"), {
+        memberId: token,
+        memberName: member.name,
+        audioPath: storagePath,
+        duration: finalDuration,
+        sizeBytes: blob.size,
+        submittedAt: serverTimestamp()
+      });
+
+      statusText.textContent = "제출 완료! 수고했어요.";
+      await loadRecentRecordings();
+    } catch (e) {
+      statusText.textContent = "지금 저장 공간이 가득 찼어요. 선생님께 알려주세요.";
+    } finally {
+      recBtn.disabled = false;
+      recBtn.textContent = "녹음 시작";
+      timerEl.textContent = "00:00";
+    }
+  }
+
+  async function loadRecentRecordings() {
+    const recListEl = document.getElementById("recList");
+    recListEl.innerHTML = "";
+
+    const q = query(
+      collection(db, "recordings"),
+      where("memberId", "==", token),
+      orderBy("submittedAt", "desc"),
+      limit(20)
+    );
+
+    let snap;
+    try {
+      snap = await getDocs(q);
+    } catch (e) {
+      recListEl.innerHTML = `<div class="sub">기록을 불러오지 못했습니다.</div>`;
+      return;
+    }
+
+    if (snap.empty) {
+      recListEl.innerHTML = `<div class="sub">아직 제출한 기록이 없어요.</div>`;
+      return;
+    }
+
+    const now = Date.now();
+
+    snap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (!data.submittedAt) return; // serverTimestamp 반영 전 문서는 건너뜀
+
+      const submittedMs = data.submittedAt.toDate().getTime();
+      const ageDays = (now - submittedMs) / (1000 * 60 * 60 * 24);
+      const withinRetention = ageDays <= RETENTION_DAYS;
+
+      const item = document.createElement("div");
+      item.className = "rec-item";
+
+      const info = document.createElement("div");
+      info.className = "info";
+      info.textContent = `${formatDate(data.submittedAt)} · ${formatDuration(data.duration || 0)}`;
+
+      item.appendChild(info);
+
+      if (withinRetention) {
+        const btn = document.createElement("button");
+        btn.className = "play-btn";
+        btn.textContent = "▶ 듣기";
+        btn.addEventListener("click", () => playRecording(data.audioPath, item, btn));
+        item.appendChild(btn);
+      } else {
+        const expired = document.createElement("span");
+        expired.className = "expired";
+        expired.textContent = "보관기간 만료";
+        item.appendChild(expired);
+      }
+
+      recListEl.appendChild(item);
+    });
+  }
+
+  async function playRecording(storagePath, itemEl, btn) {
+    let existingAudio = itemEl.querySelector("audio");
+    if (existingAudio) {
+      existingAudio.style.display = existingAudio.style.display === "none" ? "block" : "none";
+      return;
+    }
+    btn.disabled = true;
+    btn.textContent = "불러오는 중...";
+    try {
+      const { data, error } = await supabase.storage
+        .from(SUPABASE_BUCKET)
+        .createSignedUrl(storagePath, 3600);
+      if (error) throw error;
+      const url = data.signedUrl;
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = url;
+      audio.style.display = "block";
+      itemEl.appendChild(audio);
+      btn.textContent = "▶ 듣기";
+    } catch (e) {
+      btn.textContent = "재생 실패";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  await loadRecentRecordings();
+}
+
+main();
+</script>
+</body>
+</html>

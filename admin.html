@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>관리자 - 낭독 녹음</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Malgun Gothic", sans-serif;
+    background: #f5f6f8;
+    padding: 20px 14px 60px;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  .card {
+    background: white;
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    margin-bottom: 18px;
+  }
+  h1 { font-size: 20px; margin: 0 0 20px; }
+  h2 { font-size: 15px; margin: 0 0 14px; color: #333; }
+  label { display: block; font-size: 12px; color: #777; margin: 10px 0 4px; }
+  input, select {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+  }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .btn-primary {
+    width: 100%;
+    padding: 12px;
+    background: #2c3e50;
+    color: white;
+    margin-top: 18px;
+  }
+  .btn-small {
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .btn-copy { background: #3498db; color: white; }
+  .btn-play { background: #3498db; color: white; }
+  .btn-delete { background: #fdecea; color: #e74c3c; }
+  .btn-danger { background: #e74c3c; color: white; }
+  .storage-bar-bg { background: #eee; border-radius: 8px; height: 14px; overflow: hidden; margin: 10px 0 6px; }
+  .storage-bar-fill { height: 100%; background: #3498db; transition: width 0.3s; }
+  .storage-bar-fill.warn { background: #e67e22; }
+  .storage-bar-fill.danger { background: #e74c3c; }
+  .storage-text { font-size: 13px; color: #666; }
+  .warning-banner {
+    background: #fdecea;
+    color: #c0392b;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-top: 10px;
+    display: none;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; }
+  th { color: #888; font-weight: 500; font-size: 12px; }
+  .member-row { cursor: pointer; }
+  .member-row:hover { background: #f9f9fb; }
+  .link-cell { display: flex; align-items: center; gap: 6px; }
+  .rec-detail { display: none; padding: 10px 0; }
+  .rec-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 12.5px;
+  }
+  .rec-actions { display: flex; gap: 6px; align-items: center; }
+  .empty { color: #aaa; font-size: 13px; padding: 8px 0; }
+  audio { width: 100%; margin-top: 6px; display: none; }
+  .status-msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  #loginBox { max-width: 320px; margin: 80px auto; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <div id="loginBox" class="card">
+    <h1>관리자 로그인</h1>
+    <label>비밀번호</label>
+    <input type="password" id="pwInput" placeholder="비밀번호 입력">
+    <button class="btn-primary" id="loginBtn">로그인</button>
+    <div class="status-msg" id="loginMsg"></div>
+  </div>
+
+  <div id="mainArea" style="display:none;">
+
+    <div class="card">
+      <h2>저장 공간 사용량</h2>
+      <div class="storage-bar-bg"><div class="storage-bar-fill" id="storageFill" style="width:0%"></div></div>
+      <div class="storage-text" id="storageText">불러오는 중...</div>
+      <div class="warning-banner" id="warningBanner">⚠ 저장 공간이 얼마 남지 않았어요. 오래된 녹음을 정리해주세요.</div>
+    </div>
+
+    <div class="card">
+      <h2>회원 추가</h2>
+      <label>이름</label>
+      <input type="text" id="f_name">
+      <label>전화번호</label>
+      <input type="text" id="f_phone" placeholder="010-0000-0000">
+      <label>주소</label>
+      <input type="text" id="f_address">
+      <label>학교</label>
+      <input type="text" id="f_school">
+      <label>가입일자</label>
+      <input type="date" id="f_joinDate">
+      <label>가입학년</label>
+      <select id="f_joinGrade">
+        <option>5세</option><option>6세</option><option>7세</option>
+        <option>초1</option><option>초2</option><option>초3</option>
+        <option>초4</option><option>초5</option><option>초6</option>
+        <option>중1</option><option>중2</option><option>중3</option>
+      </select>
+      <button class="btn-primary" id="addMemberBtn">회원 추가</button>
+      <div class="status-msg" id="addMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>회원 목록</h2>
+      <table>
+        <thead>
+          <tr><th>이름</th><th>학교</th><th>현재학년</th><th>링크</th></tr>
+        </thead>
+        <tbody id="memberTableBody"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+import {
+  getFirestore, collection, doc, setDoc, getDocs, query, where,
+  orderBy, deleteDoc, Timestamp
+} from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+// ▼▼▼ record.html과 동일한 값을 넣으세요 ▼▼▼
+const firebaseConfig = {
+  apiKey: "AIzaSyC0jkM17R8l1zAYSbUuURZhQD47-akObpg",
+  authDomain: "hanwoori-e184b.firebaseapp.com",
+  projectId: "hanwoori-e184b",
+  storageBucket: "hanwoori-e184b.firebasestorage.app",
+  messagingSenderId: "395552995873",
+  appId: "1:395552995873:web:4019457b34b9184ee78160"
+};
+const SUPABASE_URL = "https://hnvuejkpwygbugykqmxl.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_IKbtr9QWIYtPz31IheHzcA_iFKCmSGg";
+const SUPABASE_BUCKET = "Recordings";
+// ▲▲▲ ----------------------------------- ▲▲▲
+
+const ADMIN_PASSWORD = "hanwoori6331";
+const STORAGE_CAP_BYTES = 1024 * 1024 * 1024; // Supabase 무료 한도 1GB
+const RECORD_PAGE_URL = "record.html"; // 실제 배포 경로에 맞게 수정 (예: https://내사이트.com/record.html)
+const RETENTION_DAYS = 7;
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const GRADE_ORDER = ["5세","6세","7세","초1","초2","초3","초4","초5","초6","중1","중2","중3"];
+
+function getCurrentGrade(joinDate, joinGrade) {
+  const join = new Date(joinDate);
+  const now = new Date();
+  let yearsPassed = now.getFullYear() - join.getFullYear();
+  const startIndex = GRADE_ORDER.indexOf(joinGrade);
+  if (startIndex === -1) return joinGrade;
+  const currentIndex = startIndex + yearsPassed;
+  if (currentIndex >= GRADE_ORDER.length) return "고등이상";
+  return GRADE_ORDER[currentIndex];
+}
+
+function genToken() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  let s = "";
+  for (let i = 0; i < 10; i++) s += chars[Math.floor(Math.random() * chars.length)];
+  return s;
+}
+
+function formatBytes(b) {
+  if (b < 1024 * 1024) return (b / 1024).toFixed(0) + "KB";
+  return (b / (1024 * 1024)).toFixed(1) + "MB";
+}
+
+function formatDate(ts) {
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const pad = (n) => n.toString().padStart(2, "0");
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60).toString().padStart(2, "0");
+  const s = Math.floor(sec % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+// ---------- 로그인 ----------
+const loginBox = document.getElementById("loginBox");
+const mainArea = document.getElementById("mainArea");
+const pwInput = document.getElementById("pwInput");
+const loginBtn = document.getElementById("loginBtn");
+const loginMsg = document.getElementById("loginMsg");
+
+loginBtn.addEventListener("click", () => {
+  if (pwInput.value === ADMIN_PASSWORD) {
+    loginBox.style.display = "none";
+    mainArea.style.display = "block";
+    init();
+  } else {
+    loginMsg.textContent = "비밀번호가 올바르지 않습니다.";
+  }
+});
+pwInput.addEventListener("keydown", (e) => { if (e.key === "Enter") loginBtn.click(); });
+
+// ---------- 초기 로드 ----------
+async function init() {
+  await loadStorageUsage();
+  await loadMembers();
+}
+
+// ---------- 저장공간 사용량 ----------
+async function loadStorageUsage() {
+  const fillEl = document.getElementById("storageFill");
+  const textEl = document.getElementById("storageText");
+  const bannerEl = document.getElementById("warningBanner");
+
+  let total = 0;
+  try {
+    const snap = await getDocs(collection(db, "recordings"));
+    snap.forEach((d) => { total += d.data().sizeBytes || 0; });
+  } catch (e) {
+    textEl.textContent = "사용량을 불러오지 못했습니다.";
+    return;
+  }
+
+  const pct = Math.min(100, (total / STORAGE_CAP_BYTES) * 100);
+  fillEl.style.width = pct + "%";
+  fillEl.className = "storage-bar-fill" + (pct >= 90 ? " danger" : pct >= 80 ? " warn" : "");
+  textEl.textContent = `${formatBytes(total)} / ${formatBytes(STORAGE_CAP_BYTES)} 사용 중 (${pct.toFixed(0)}%)`;
+  bannerEl.style.display = pct >= 80 ? "block" : "none";
+}
+
+// ---------- 회원 추가 ----------
+document.getElementById("addMemberBtn").addEventListener("click", async () => {
+  const name = document.getElementById("f_name").value.trim();
+  const phone = document.getElementById("f_phone").value.trim();
+  const address = document.getElementById("f_address").value.trim();
+  const school = document.getElementById("f_school").value.trim();
+  const joinDate = document.getElementById("f_joinDate").value;
+  const joinGrade = document.getElementById("f_joinGrade").value;
+  const addMsg = document.getElementById("addMsg");
+
+  if (!name || !joinDate) {
+    addMsg.textContent = "이름과 가입일자는 필수입니다.";
+    return;
+  }
+
+  const token = genToken();
+
+  try {
+    await setDoc(doc(db, "members", token), {
+      name, phone, address, school, joinDate, joinGrade,
+      active: true,
+      createdAt: Timestamp.now()
+    });
+    addMsg.textContent = `추가 완료! 링크: ${RECORD_PAGE_URL}?id=${token}`;
+    ["f_name","f_phone","f_address","f_school","f_joinDate"].forEach(id => document.getElementById(id).value = "");
+    await loadMembers();
+  } catch (e) {
+    addMsg.textContent = "추가에 실패했습니다.";
+  }
+});
+
+// ---------- 회원 목록 ----------
+async function loadMembers() {
+  const tbody = document.getElementById("memberTableBody");
+  tbody.innerHTML = `<tr><td colspan="4" class="empty">불러오는 중...</td></tr>`;
+
+  let snap;
+  try {
+    snap = await getDocs(collection(db, "members"));
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">불러오지 못했습니다.</td></tr>`;
+    return;
+  }
+
+  if (snap.empty) {
+    tbody.innerHTML = `<tr><td colspan="4" class="empty">등록된 회원이 없습니다.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  snap.forEach((docSnap) => {
+    const token = docSnap.id;
+    const m = docSnap.data();
+    if (m.active === false) return;
+
+    const currentGrade = getCurrentGrade(m.joinDate, m.joinGrade);
+    const link = `${RECORD_PAGE_URL}?id=${token}`;
+
+    const row = document.createElement("tr");
+    row.className = "member-row";
+    row.innerHTML = `
+      <td>${m.name}</td>
+      <td>${m.school || "-"}</td>
+      <td>${currentGrade}</td>
+      <td>
+        <div class="link-cell">
+          <button class="btn-small btn-copy" data-link="${link}">복사</button>
+        </div>
+      </td>
+    `;
+
+    const detailRow = document.createElement("tr");
+    const detailCell = document.createElement("td");
+    detailCell.colSpan = 4;
+    const detailDiv = document.createElement("div");
+    detailDiv.className = "rec-detail";
+    detailDiv.dataset.loaded = "0";
+    detailCell.appendChild(detailDiv);
+    detailRow.appendChild(detailCell);
+
+    row.addEventListener("click", (e) => {
+      if (e.target.closest(".btn-copy")) return;
+      const isOpen = detailDiv.style.display === "block";
+      detailDiv.style.display = isOpen ? "none" : "block";
+      if (!isOpen && detailDiv.dataset.loaded === "0") {
+        loadMemberRecordings(token, m.name, detailDiv);
+        detailDiv.dataset.loaded = "1";
+      }
+    });
+
+    row.querySelector(".btn-copy").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await navigator.clipboard.writeText(link);
+      const btn = e.target;
+      const orig = btn.textContent;
+      btn.textContent = "복사됨!";
+      setTimeout(() => { btn.textContent = orig; }, 1200);
+    });
+
+    tbody.appendChild(row);
+    tbody.appendChild(detailRow);
+  });
+}
+
+// ---------- 회원별 녹음 기록 ----------
+async function loadMemberRecordings(token, memberName, containerEl) {
+  containerEl.innerHTML = `<div class="empty">불러오는 중...</div>`;
+
+  const q = query(
+    collection(db, "recordings"),
+    where("memberId", "==", token),
+    orderBy("submittedAt", "desc")
+  );
+
+  let snap;
+  try {
+    snap = await getDocs(q);
+  } catch (e) {
+    containerEl.innerHTML = `<div class="empty">기록을 불러오지 못했습니다.</div>`;
+    return;
+  }
+
+  if (snap.empty) {
+    containerEl.innerHTML = `<div class="empty">제출한 기록이 없습니다.</div>`;
+    return;
+  }
+
+  containerEl.innerHTML = "";
+  const docs = snap.docs;
+  const latestId = docs[0].id;
+
+  docs.forEach((docSnap) => {
+    const data = docSnap.data();
+    if (!data.submittedAt) return;
+
+    const isLatest = docSnap.id === latestId;
+    const item = document.createElement("div");
+    item.className = "rec-item";
+
+    const info = document.createElement("div");
+    info.textContent = `${formatDate(data.submittedAt)} · ${formatDuration(data.duration || 0)} · ${formatBytes(data.sizeBytes || 0)}${isLatest ? " (최신, 보존)" : ""}`;
+
+    const actions = document.createElement("div");
+    actions.className = "rec-actions";
+
+    const playBtn = document.createElement("button");
+    playBtn.className = "btn-small btn-play";
+    playBtn.textContent = "▶ 듣기";
+    playBtn.addEventListener("click", () => playRecording(data.audioPath, item, playBtn));
+
+    const delBtn = document.createElement("button");
+    delBtn.className = "btn-small btn-delete";
+    delBtn.textContent = "삭제";
+    delBtn.addEventListener("click", () => deleteRecording(docSnap.id, data.audioPath, item, memberName));
+
+    actions.appendChild(playBtn);
+    actions.appendChild(delBtn);
+
+    item.appendChild(info);
+    item.appendChild(actions);
+    containerEl.appendChild(item);
+  });
+}
+
+async function playRecording(storagePath, itemEl, btn) {
+  let existingAudio = itemEl.querySelector("audio");
+  if (existingAudio) {
+    existingAudio.style.display = existingAudio.style.display === "none" ? "block" : "none";
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = "불러오는 중...";
+  try {
+    const { data, error } = await supabase.storage.from(SUPABASE_BUCKET).createSignedUrl(storagePath, 3600);
+    if (error) throw error;
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.src = data.signedUrl;
+    audio.style.display = "block";
+    itemEl.appendChild(audio);
+    btn.textContent = "▶ 듣기";
+  } catch (e) {
+    btn.textContent = "재생 실패";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteRecording(docId, storagePath, itemEl, memberName) {
+  if (!confirm(`${memberName}님의 이 녹음을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  try {
+    await supabase.storage.from(SUPABASE_BUCKET).remove([storagePath]);
+    await deleteDoc(doc(db, "recordings", docId));
+    itemEl.remove();
+    await loadStorageUsage();
+  } catch (e) {
+    alert("삭제에 실패했습니다.");
+  }
+}
+</script>
+</body>
+</html>
