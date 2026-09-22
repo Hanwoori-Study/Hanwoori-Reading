@@ -101,6 +101,7 @@
   th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #eee; }
   th { color: #888; font-weight: 500; font-size: 12px; }
   .link-cell { display: flex; align-items: center; gap: 6px; }
+  .name-link { color: #2c3e50; text-decoration: underline; cursor: pointer; font-weight: 600; }
   .rec-item {
     display: flex;
     justify-content: space-between;
@@ -176,7 +177,7 @@
         </div>
         <table>
           <thead>
-            <tr><th>이름</th><th>학교</th><th>현재학년</th><th>링크</th></tr>
+            <tr><th>이름</th><th>학교</th><th>현재학년</th><th>링크</th><th>삭제</th></tr>
           </thead>
           <tbody id="memberTableBody"></tbody>
         </table>
@@ -230,10 +231,39 @@
   </div>
 </div>
 
+<!-- 학생 정보수정 모달 -->
+<div class="modal-overlay" id="editModalOverlay">
+  <div class="modal-box">
+    <h1 style="margin-bottom:16px;">학생 정보수정</h1>
+    <label>이름</label>
+    <input type="text" id="e_name">
+    <label>전화번호</label>
+    <input type="text" id="e_phone" placeholder="010-0000-0000">
+    <label>주소</label>
+    <input type="text" id="e_address">
+    <label>학교</label>
+    <input type="text" id="e_school">
+    <label>가입일자</label>
+    <input type="date" id="e_joinDate">
+    <label>가입학년</label>
+    <select id="e_joinGrade">
+      <option>5세</option><option>6세</option><option>7세</option>
+      <option>초1</option><option>초2</option><option>초3</option>
+      <option>초4</option><option>초5</option><option>초6</option>
+      <option>중1</option><option>중2</option><option>중3</option>
+    </select>
+    <div class="status-msg" id="editMsg"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="cancelEditBtn">취소</button>
+      <button class="btn-primary" id="saveEditBtn" style="margin-top:0;">저장</button>
+    </div>
+  </div>
+</div>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
 import {
-  getFirestore, collection, doc, setDoc, getDocs, query, where,
+  getFirestore, collection, doc, setDoc, updateDoc, getDocs, query, where,
   orderBy, deleteDoc, Timestamp
 } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
@@ -401,16 +431,64 @@ document.getElementById("addMemberBtn").addEventListener("click", async () => {
   }
 });
 
+// ---------- 학생 정보수정 모달 ----------
+const editModalOverlay = document.getElementById("editModalOverlay");
+const editMsg = document.getElementById("editMsg");
+let editingToken = null;
+
+function openEditModal(m) {
+  editingToken = m.token;
+  editMsg.textContent = "";
+  document.getElementById("e_name").value = m.name || "";
+  document.getElementById("e_phone").value = m.phone || "";
+  document.getElementById("e_address").value = m.address || "";
+  document.getElementById("e_school").value = m.school || "";
+  document.getElementById("e_joinDate").value = m.joinDate || "";
+  document.getElementById("e_joinGrade").value = m.joinGrade || "5세";
+  editModalOverlay.classList.add("open");
+}
+
+document.getElementById("cancelEditBtn").addEventListener("click", () => {
+  editModalOverlay.classList.remove("open");
+});
+editModalOverlay.addEventListener("click", (e) => {
+  if (e.target === editModalOverlay) editModalOverlay.classList.remove("open");
+});
+
+document.getElementById("saveEditBtn").addEventListener("click", async () => {
+  const name = document.getElementById("e_name").value.trim();
+  const phone = document.getElementById("e_phone").value.trim();
+  const address = document.getElementById("e_address").value.trim();
+  const school = document.getElementById("e_school").value.trim();
+  const joinDate = document.getElementById("e_joinDate").value;
+  const joinGrade = document.getElementById("e_joinGrade").value;
+
+  if (!name || !joinDate) {
+    editMsg.textContent = "이름과 가입일자는 필수입니다.";
+    return;
+  }
+
+  try {
+    await updateDoc(doc(db, "members", editingToken), {
+      name, phone, address, school, joinDate, joinGrade
+    });
+    editModalOverlay.classList.remove("open");
+    await loadMembers();
+  } catch (e) {
+    editMsg.textContent = "수정에 실패했습니다.";
+  }
+});
+
 // ---------- 학생 목록 (학생 관리 탭) ----------
 async function loadMembers() {
   const tbody = document.getElementById("memberTableBody");
-  tbody.innerHTML = `<tr><td colspan="4" class="empty">불러오는 중...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="empty">불러오는 중...</td></tr>`;
 
   let snap;
   try {
     snap = await getDocs(collection(db, "members"));
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">불러오지 못했습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">불러오지 못했습니다.</td></tr>`;
     return;
   }
 
@@ -422,7 +500,7 @@ async function loadMembers() {
   });
 
   if (membersCache.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="empty">등록된 학생이 없습니다.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">등록된 학생이 없습니다.</td></tr>`;
   } else {
     tbody.innerHTML = "";
     membersCache
@@ -433,14 +511,15 @@ async function loadMembers() {
 
         const row = document.createElement("tr");
         row.innerHTML = `
-          <td>${m.name}</td>
+          <td><span class="name-link">${m.name}</span></td>
           <td>${m.school || "-"}</td>
           <td>${currentGrade}</td>
-          <td class="link-cell">
-            <button class="btn-small btn-copy">복사</button>
-            <button class="btn-small btn-delete">삭제</button>
-          </td>
+          <td class="link-cell"><button class="btn-small btn-copy">복사</button></td>
+          <td><button class="btn-small btn-delete">삭제</button></td>
         `;
+        row.querySelector(".name-link").addEventListener("click", () => {
+          openEditModal(m);
+        });
         row.querySelector(".btn-copy").addEventListener("click", async () => {
           await navigator.clipboard.writeText(link);
           const btn = row.querySelector(".btn-copy");
