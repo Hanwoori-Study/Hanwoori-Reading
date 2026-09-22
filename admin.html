@@ -436,7 +436,10 @@ async function loadMembers() {
           <td>${m.name}</td>
           <td>${m.school || "-"}</td>
           <td>${currentGrade}</td>
-          <td><button class="btn-small btn-copy">복사</button></td>
+          <td class="link-cell">
+            <button class="btn-small btn-copy">복사</button>
+            <button class="btn-small btn-delete">삭제</button>
+          </td>
         `;
         row.querySelector(".btn-copy").addEventListener("click", async () => {
           await navigator.clipboard.writeText(link);
@@ -445,11 +448,25 @@ async function loadMembers() {
           btn.textContent = "복사됨!";
           setTimeout(() => { btn.textContent = orig; }, 1200);
         });
+        row.querySelector(".btn-delete").addEventListener("click", () => {
+          deleteMember(m.token, m.name);
+        });
         tbody.appendChild(row);
       });
   }
 
   populateRecordSelect();
+}
+
+// ---------- 학생 삭제 ----------
+async function deleteMember(token, name) {
+  if (!confirm(`${name} 학생을 삭제할까요?\n학생의 녹음 기록은 삭제되지 않으며, 링크로 더 이상 접근할 수 없게 됩니다.`)) return;
+  try {
+    await deleteDoc(doc(db, "members", token));
+    await loadMembers();
+  } catch (e) {
+    alert("삭제에 실패했습니다.");
+  }
 }
 
 // ---------- 학생 기록 보기 탭 ----------
